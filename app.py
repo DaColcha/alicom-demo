@@ -11,8 +11,6 @@ WHATSAPP_VERIFY_TOKEN = os.environ.get('WHATSAPP_VERIFY_TOKEN', '')
 
 @app.get('/webhook/whatsapp')
 def verify_webhook(request: Request):
-    """Handshake endpoint Meta's Cloud API (WABA) calls once when
-    the webhook URL is registered."""
     mode = request.query_params.get('hub.mode')
     token = request.query_params.get('hub.verify_token')
     challenge = request.query_params.get('hub.challenge')
