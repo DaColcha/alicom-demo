@@ -1,18 +1,36 @@
-"""
-Provider-agnostic WhatsApp sending/parsing layer.
+import os
+from typing import Any, Optional
 
-No WhatsApp API has been chosen yet (candidates: Meta Cloud API, Twilio,
-360dialog, etc.). Fill these two functions in once a provider is picked —
-the webhook in app.py only depends on this interface, not on any provider
-specifics.
-"""
+import requests
+
+WHATSAPP_API_VERSION = os.environ.get('WHATSAPP_API_VERSION', 'v21.0')
+WHATSAPP_PHONE_NUMBER_ID = os.environ.get('WHATSAPP_PHONE_NUMBER_ID', '')
+WHATSAPP_ACCESS_TOKEN = os.environ.get('WHATSAPP_ACCESS_TOKEN', '')
+
+GRAPH_API_URL = f'https://graph.facebook.com/{WHATSAPP_API_VERSION}/{WHATSAPP_PHONE_NUMBER_ID}/messages'
 
 
-def extract_incoming_message(payload: dict) -> tuple[str, str]:
-    """Given the raw webhook payload, return (sender_id, message_text)."""
-    raise NotImplementedError('Pick a WhatsApp provider and parse its payload shape here.')
+def extract_incoming_message(payload: dict) -> Optional[tuple[Any, Any]]:
+
+    value = payload['entry'][0]['changes'][0]['value']
+    message = value['messages'][0]
+
+    if message.get('type') != 'text':
+        return None
+
+    return message['from'], message['text']['body']
 
 
 def send_message(to: str, text: str) -> None:
-    """Send `text` to `to` via the chosen WhatsApp provider."""
-    raise NotImplementedError('Pick a WhatsApp provider and implement sending here.')
+    response = requests.post(
+        GRAPH_API_URL,
+        headers={'Authorization': f'Bearer {WHATSAPP_ACCESS_TOKEN}'},
+        json={
+            'messaging_product': 'whatsapp',
+            'to': to,
+            'type': 'text',
+            'text': {'body': text},
+        },
+        timeout=10,
+    )
+    response.raise_for_status()

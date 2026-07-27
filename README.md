@@ -8,7 +8,7 @@ A WhatsApp chatbot that answers accounting questions (e.g. RUC registration, fil
 WhatsApp user
      │  sends a message
      ▼
-WhatsApp provider (TBD)
+WhatsApp Business API (Meta Cloud API / WABA)
      │  POSTs the incoming message to your webhook
      ▼
 POST /webhook/whatsapp          (app.py)
@@ -17,10 +17,6 @@ POST /webhook/whatsapp          (app.py)
      │
      ├─ bedrock_client.ask_accountant_bot(message_text)
      │       └─ Bedrock Agent Runtime: RetrieveAndGenerate
-     │             ├─ retrieves relevant chunks from the Knowledge Base
-     │             └─ generates an answer with Amazon Nova 2 Lite,
-     │                constrained by a custom prompt template
-     │
      └─ whatsapp_client.send_message(sender_id, answer)      → reply sent back to the user
 ```
 
@@ -32,15 +28,9 @@ POST /webhook/whatsapp          (app.py)
 |---|---|
 | `app.py` | FastAPI app. Owns the two HTTP routes and wires `whatsapp_client` ↔ `bedrock_client` together. Provider-agnostic. |
 | `bedrock_client.py` | `ask_accountant_bot(question) -> str`. Calls Bedrock's `retrieve_and_generate` against the knowledge base, with a prompt template that forces Spanish, an accountant tone, and answers grounded only in retrieved search results. |
-| `whatsapp_client.py` | `extract_incoming_message(payload)` and `send_message(to, text)` — both currently `raise NotImplementedError`. This is the *only* file that should change when a WhatsApp provider is picked. |
-| `requirements.txt` | `boto3`, `fastapi`, `uvicorn`. |
+| `whatsapp_client.py` | `extract_incoming_message(payload)` and `send_message(to, text)`, implemented against Meta's WhatsApp Business API (Cloud API / WABA). This is the *only* file that talks to the Graph API directly. |
+| `requirements.txt` | `boto3`, `fastapi`, `requests`, `uvicorn`. |
 
-## Why it's structured this way
-
-- **`whatsapp_client.py` is isolated from `app.py` and `bedrock_client.py`** so that choosing a provider later (Meta Cloud API vs. Twilio vs. 360dialog) only means implementing two functions with a fixed signature — the webhook routing and the Bedrock call don't need to know or care which provider is behind them.
-- **`ask_accountant_bot` is a plain function, not a script**, so it can be called once per incoming HTTP request instead of running once at import time.
-- **The prompt template is data, not model behavior** — Bedrock's `generationConfiguration.promptTemplate` lets us pin down language (Spanish) and persona (accountant) without fine-tuning or post-processing, using Bedrock's own `$search_results$` / `$output_format_instructions$` placeholders so retrieval grounding still works.
-- **Amazon Nova 2 Lite is invoked via an inference profile ARN**, not the plain foundation-model ARN — Bedrock rejects on-demand invocation of this model without one.
 
 ## Running locally
 
@@ -49,10 +39,14 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 
 export WHATSAPP_VERIFY_TOKEN=some-secret-you-pick
+export WHATSAPP_ACCESS_TOKEN=<your-cloud-api-access-token>
+export WHATSAPP_PHONE_NUMBER_ID=<your-phone-number-id>
 .venv/bin/uvicorn app:app --reload
 ```
 
 Requires AWS credentials configured (`aws configure`) with Bedrock access in `us-east-1`.
+
+`WHATSAPP_ACCESS_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID` come from the Meta App Dashboard for the WhatsApp Business app (System User token + the phone number's ID under WhatsApp > API Setup). `WHATSAPP_API_VERSION` defaults to `v25.0` and can be overridden if Meta deprecates it.
 
 ## Running with Docker
 
@@ -65,25 +59,9 @@ docker run -d --name alicon-demo -p 8000:8000 \
   -e AWS_ACCESS_KEY_ID=<your_access_key_id> \
   -e AWS_SECRET_ACCESS_KEY=<your_secret_access_key> \
   -e WHATSAPP_VERIFY_TOKEN=devtoken \
-  alicon-demo
-```
-
-Values come from `~/.aws/credentials` (the file `aws configure` wrote earlier).
-
-Alternative if you'd rather not pass keys on the command line (they'd land in shell history): mount your AWS config read-only instead —
-
-```bash
-docker run -d --name alicon-demo -p 8000:8000 \
-  -v ~/.aws:/root/.aws:ro \
-  -e WHATSAPP_VERIFY_TOKEN=devtoken \
+  -e WHATSAPP_ACCESS_TOKEN=<your_cloud_api_access_token> \
+  -e WHATSAPP_PHONE_NUMBER_ID=<your_phone_number_id> \
   alicon-demo
 ```
 
 Test with the requests in `requests.http`, e.g. `curl "http://127.0.0.1:8000/webhook/whatsapp?hub.mode=subscribe&hub.verify_token=devtoken&hub.challenge=12345"` should echo back `12345`. Clean up with `docker stop alicon-demo && docker rm alicon-demo`.
-
-**In an actual deployment, skip access keys entirely** and attach an IAM role instead — an ECS/Fargate task role, an EC2 instance profile, or IRSA on EKS. boto3 picks it up automatically with zero container config, and there's no long-lived credential to leak or rotate. One gotcha on bare EC2: IMDSv2's default hop limit of 1 blocks the metadata service from inside a container; raise it with `aws ec2 modify-instance-metadata-options --http-put-response-hop-limit 2`.
-
-## What's left
-
-- Pick a WhatsApp provider and implement `extract_incoming_message` / `send_message` in `whatsapp_client.py` accordingly.
-- If the chosen provider doesn't use Meta's `hub.challenge` verification scheme, adjust or remove `GET /webhook/whatsapp` in `app.py`.

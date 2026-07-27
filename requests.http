@@ -1,5 +1,7 @@
 ### Run the server first:
 ###   export WHATSAPP_VERIFY_TOKEN=devtoken
+###   export WHATSAPP_ACCESS_TOKEN=<your-cloud-api-access-token>
+###   export WHATSAPP_PHONE_NUMBER_ID=<your-phone-number-id>
 ###   .venv/bin/uvicorn app:app --reload
 
 @baseUrl = http://127.0.0.1:8000
@@ -11,12 +13,69 @@ GET {{baseUrl}}/webhook/whatsapp?hub.mode=subscribe&hub.verify_token={{verifyTok
 ### Webhook verification handshake — wrong token (should 403)
 GET {{baseUrl}}/webhook/whatsapp?hub.mode=subscribe&hub.verify_token=wrong-token&hub.challenge=12345
 
-### Incoming message — fails with 500 until whatsapp_client.py is implemented
-### (extract_incoming_message/send_message currently raise NotImplementedError)
+### Incoming text message — Cloud API (WABA) webhook payload shape.
+### Triggers a real send_message call, so WHATSAPP_ACCESS_TOKEN/WHATSAPP_PHONE_NUMBER_ID
+### must be valid or this will fail on the outbound Graph API call.
 POST {{baseUrl}}/webhook/whatsapp
 Content-Type: application/json
 
 {
-  "from": "+593999999999",
-  "message": "cuales son los limites de fecha para hacer la declaracion?"
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WABA_ID",
+      "changes": [
+        {
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "593999999999",
+              "phone_number_id": "PHONE_NUMBER_ID"
+            },
+            "contacts": [
+              { "profile": { "name": "Jane Doe" }, "wa_id": "593999999999" }
+            ],
+            "messages": [
+              {
+                "from": "593999999999",
+                "id": "wamid.TEST123",
+                "timestamp": "1700000000",
+                "type": "text",
+                "text": { "body": "cuales son los limites de fecha para hacer la declaracion?" }
+              }
+            ]
+          },
+          "field": "messages"
+        }
+      ]
+    }
+  ]
+}
+
+### Status callback (delivery/read receipt) — should be ignored, not answered
+POST {{baseUrl}}/webhook/whatsapp
+Content-Type: application/json
+
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WABA_ID",
+      "changes": [
+        {
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "593999999999",
+              "phone_number_id": "PHONE_NUMBER_ID"
+            },
+            "statuses": [
+              { "id": "wamid.TEST123", "status": "delivered", "timestamp": "1700000000", "recipient_id": "593999999999" }
+            ]
+          },
+          "field": "messages"
+        }
+      ]
+    }
+  ]
 }

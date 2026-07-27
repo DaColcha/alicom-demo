@@ -11,8 +11,8 @@ WHATSAPP_VERIFY_TOKEN = os.environ.get('WHATSAPP_VERIFY_TOKEN', '')
 
 @app.get('/webhook/whatsapp')
 def verify_webhook(request: Request):
-    """Handshake endpoint some providers (e.g. Meta Cloud API) call once when
-    the webhook URL is registered. Adjust or remove once a provider is picked."""
+    """Handshake endpoint Meta's Cloud API (WABA) calls once when
+    the webhook URL is registered."""
     mode = request.query_params.get('hub.mode')
     token = request.query_params.get('hub.verify_token')
     challenge = request.query_params.get('hub.challenge')
@@ -25,7 +25,11 @@ def verify_webhook(request: Request):
 @app.post('/webhook/whatsapp')
 async def receive_message(request: Request):
     payload = await request.json()
-    sender_id, message_text = whatsapp_client.extract_incoming_message(payload)
+    incoming = whatsapp_client.extract_incoming_message(payload)
+    if incoming is None:
+        return {'status': 'ignored'}
+
+    sender_id, message_text = incoming
     answer = ask_accountant_bot(message_text)
     whatsapp_client.send_message(sender_id, answer)
     return {'status': 'ok'}
