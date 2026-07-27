@@ -17,6 +17,7 @@ $output_format_instructions$"""
 _client = boto3.client('bedrock-agent-runtime', region_name='us-east-1')
 
 def ask_accountant_bot(question: str) -> str:
+    print('Asking bot....')
     response = _client.retrieve_and_generate(
         input={'text': question},
         retrieveAndGenerateConfiguration={

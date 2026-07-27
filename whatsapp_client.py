@@ -11,7 +11,7 @@ GRAPH_API_URL = f'https://graph.facebook.com/{WHATSAPP_API_VERSION}/{WHATSAPP_PH
 
 
 def extract_incoming_message(payload: dict) -> Optional[tuple[Any, Any]]:
-
+    print('Checking incoming message' , payload)
     value = payload['entry'][0]['changes'][0]['value']
     message = value['messages'][0]
 
@@ -22,6 +22,7 @@ def extract_incoming_message(payload: dict) -> Optional[tuple[Any, Any]]:
 
 
 def send_message(to: str, text: str) -> None:
+    print('Sending response to ' , to)
     response = requests.post(
         GRAPH_API_URL,
         headers={'Authorization': f'Bearer {WHATSAPP_ACCESS_TOKEN}'},
