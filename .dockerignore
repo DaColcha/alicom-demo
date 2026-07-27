@@ -1,0 +1,9 @@
+.venv/
+.git/
+.idea/
+.claude/
+__pycache__/
+*.pyc
+.env
+README.md
+requests.http
