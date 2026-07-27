@@ -1,0 +1,22 @@
+### Run the server first:
+###   export WHATSAPP_VERIFY_TOKEN=devtoken
+###   .venv/bin/uvicorn app:app --reload
+
+@baseUrl = http://127.0.0.1:8000
+@verifyToken = devtoken
+
+### Webhook verification handshake — success (should echo back the challenge)
+GET {{baseUrl}}/webhook/whatsapp?hub.mode=subscribe&hub.verify_token={{verifyToken}}&hub.challenge=12345
+
+### Webhook verification handshake — wrong token (should 403)
+GET {{baseUrl}}/webhook/whatsapp?hub.mode=subscribe&hub.verify_token=wrong-token&hub.challenge=12345
+
+### Incoming message — fails with 500 until whatsapp_client.py is implemented
+### (extract_incoming_message/send_message currently raise NotImplementedError)
+POST {{baseUrl}}/webhook/whatsapp
+Content-Type: application/json
+
+{
+  "from": "+593999999999",
+  "message": "cuales son los limites de fecha para hacer la declaracion?"
+}
